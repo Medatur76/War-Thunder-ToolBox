@@ -1,0 +1,10 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="WarThunderToolBox:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/WarThunderToolBox_jar</output-path>
+    <root id="archive" name="WarThunderToolBox.jar">
+      <element id="module-output" name="WarThunderToolBox" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/jetbrains/annotations/24.0.0/annotations-24.0.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/jars/gson-2.11.0.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>
