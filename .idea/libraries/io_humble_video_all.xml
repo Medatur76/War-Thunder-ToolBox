@@ -1,0 +1,18 @@
+<component name="libraryTable">
+  <library name="io.humble.video.all" type="repository">
+    <properties maven-id="io.humble:humble-video-all:0.3.0" />
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-all-0.3.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-noarch-0.3.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/slf4j-api-1.7.5.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-arch-x86_64-w64-mingw32-0.3.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-all-0.3.0-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-noarch-0.3.0-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/slf4j-api-1.7.5-sources.jar!/" />
+      <root url="jar://$PROJECT_DIR$/../libraries/humble-video-arch-x86_64-w64-mingw32-0.3.0-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
