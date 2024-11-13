@@ -17,5 +17,6 @@
       </library>
     </orderEntry>
     <orderEntry type="library" name="gson-2.11.0" level="project" />
+    <orderEntry type="library" name="io.humble.video.all" level="project" />
   </component>
 </module>

@@ -1,6 +1,9 @@
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.humble.video.*;
+import io.humble.video.awt.MediaPictureConverter;
+import io.humble.video.awt.MediaPictureConverterFactory;
 import org.jetbrains.annotations.NotNull;
 
 import javax.imageio.ImageIO;
@@ -23,10 +26,10 @@ public class Main extends Canvas implements Runnable {
     private Dimension d;
     private BufferedImage bf;
 
-    private final List<JsonObject> imgObject = new ArrayList<>();
-    private List<JsonObject> drawObject = new ArrayList<>();
+    private final List<JsonObject> imgObject = new ArrayList<>(), drawObject = new ArrayList<>();
+    private final List<BufferedImage> videoFrames = new ArrayList<>();
 
-    private boolean running = false, updt = false, js = true;
+    private boolean running = false, js = true;
 
     private static final float WIDTH = 640, HEIGHT = WIDTH / 12 * 9;
     private static float LWIDTH = 640, LHEIGHT = LWIDTH / 12 * 9;
@@ -82,7 +85,7 @@ public class Main extends Canvas implements Runnable {
         CWIDTH = (float) window.getWH().width;
         CHEIGHT = (float) window.getWH().height;
         if (LWIDTH != CWIDTH || LHEIGHT != CHEIGHT) {
-            updt = true;
+            d = getDimensionKeepScale(d.width, d.height, CWIDTH, CHEIGHT);
         }
         LWIDTH = CWIDTH;
         LHEIGHT = CHEIGHT;
@@ -112,7 +115,7 @@ public class Main extends Canvas implements Runnable {
             } else if (!js) {
                 genImage(true);
                 js = true;
-                bf = ImageIO.read(Objects.requireNonNull(getClass().getResource("res/map.png")));
+                bf = ImageIO.read(getClass().getResource("res/map.png"));
             }
         } catch (IllegalStateException e) {
             if (!js && !b) {
@@ -129,6 +132,14 @@ public class Main extends Canvas implements Runnable {
             return;
         }
 
+        if (drawObject.isEmpty() && !js) {
+            tick();
+        }
+
+        try {
+            if (bf == null) bf = ImageIO.read(getClass().getResource("res/map.png"));
+        } catch (Exception e) {e.printStackTrace();}
+
         Graphics g = bs.getDrawGraphics();
 
         Graphics2D g2d = (Graphics2D)g.create();
@@ -136,16 +147,8 @@ public class Main extends Canvas implements Runnable {
         g.setColor(Color.GRAY);
         g.fillRect(0, 0, (int) CWIDTH, (int) CHEIGHT);
 
-        try {
-            if (bf == null) bf = ImageIO.read(Objects.requireNonNull(getClass().getResource("res/map.png")));
-        } catch (Exception _) {}
-
         if (d == null) {
             d = getDimensionKeepScale(bf.getWidth(), bf.getHeight(), CWIDTH, CHEIGHT);
-        }
-        if (updt) {
-            d = getDimensionKeepScale(d.width, d.height, CWIDTH, CHEIGHT);
-            updt = false;
         }
 
         int hi = 8;
@@ -161,19 +164,22 @@ public class Main extends Canvas implements Runnable {
 
         g.drawImage(bf, 0, 0,d.width, d.height, null);
 
+        BufferedImage image = new BufferedImage(256, 256, BufferedImage.TYPE_3BYTE_BGR);
+
+        Graphics2D ig2d = image.createGraphics();
+
         for (int i = 0; i < drawObject.size();) {
             JsonObject object = drawObject.get(i).getAsJsonObject();
             g2d.setColor(Color.decode(object.get("color").getAsString()));
+            ig2d.setColor(Color.decode(object.get("color").getAsString()));
             Rectangle2D.Float rect = new Rectangle2D.Float(((float)d.width) * object.get("x").getAsFloat(), ((float)d.height) * object.get("y").getAsFloat(), hi * zoom, hi * zoom);
+            Rectangle2D.Float rect2 = new Rectangle2D.Float(1024 * object.get("x").getAsFloat(), 1024 * object.get("y").getAsFloat(), 1, 1);
             g2d.fill(rect);
+            ig2d.fill(rect2);
             i++;
         }
 
-        /*g.setColor(Color.WHITE);
-
-        g.setFont(new Font("arial", Font.BOLD, 52));
-
-        g.drawString("Zoom: " + zoom, 0, 0);*/
+        if (!js && !(drawObject.isEmpty())) videoFrames.add(image);
 
         g.setColor(Color.BLUE);
         g.fillRect(170, 400, 300, 40);
@@ -225,7 +231,7 @@ public class Main extends Canvas implements Runnable {
 
         File output = new File("output");
 
-        output.mkdir();
+        if (!(output.exists())) output.mkdir();
 
         Mouse mouse = new Mouse(this);
         //this.addMouseWheelListener(new Mouse(this));
@@ -268,6 +274,71 @@ public class Main extends Canvas implements Runnable {
         }
         if (auto) {
             imgObject.clear();
+        }
+
+        try {
+            final Rational framerate = Rational.make(1, 5);
+
+            final Muxer muxer = Muxer.make(name + ".mp4", null, null);
+
+            final MuxerFormat format = muxer.getFormat();
+            final Codec codec = Codec.findEncodingCodec(format.getDefaultVideoCodecId());
+
+            Encoder encoder = Encoder.make(codec);
+
+            encoder.setWidth(1024);
+            encoder.setHeight(1024);
+
+            final PixelFormat.Type pixelformat = PixelFormat.Type.PIX_FMT_YUV420P;
+            encoder.setPixelFormat(pixelformat);
+            encoder.setTimeBase(framerate);
+
+            if (format.getFlag(MuxerFormat.Flag.GLOBAL_HEADER)) encoder.setFlag(Encoder.Flag.FLAG_GLOBAL_HEADER, true);
+
+            encoder.open(null, null);
+            muxer.addNewStream(encoder);
+            muxer.open(null, null);
+
+            MediaPictureConverter converter = null;
+            final MediaPicture picture = MediaPicture.make(encoder.getWidth(), encoder.getHeight(), pixelformat);
+            picture.setTimeBase(framerate);
+
+            final MediaPacket packet = MediaPacket.make();
+            for (int i = 0; i < videoFrames.size(); i++) {
+                System.out.println(i);
+                final BufferedImage frame = new BufferedImage(1024, 1024, BufferedImage.TYPE_3BYTE_BGR);
+                final Graphics gd = frame.getGraphics();
+                final BufferedImage back = bf;
+                final BufferedImage icons = videoFrames.get(i);
+
+                gd.drawImage(back, 0, 0, frame.getWidth(), frame.getHeight(), null);
+                gd.drawImage(icons, 0, 0, frame.getWidth(), frame.getHeight(), null);
+
+                gd.dispose();
+
+                if (converter == null)
+                    converter = MediaPictureConverterFactory.createConverter(frame, picture);
+                converter.toPicture(picture, frame, i);
+
+                do {
+                    encoder.encode(packet, picture);
+                    if (packet.isComplete())
+                        muxer.write(packet, false);
+                } while (packet.isComplete());
+            }
+
+            do {
+                encoder.encode(packet, null);
+                if (packet.isComplete())
+                    muxer.write(packet, false);
+            } while (packet.isComplete());
+
+            muxer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if (auto) {
+            videoFrames.clear();
         }
     }
 }
