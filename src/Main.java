@@ -13,6 +13,7 @@ import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.*;
+import java.sql.Time;
 import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,10 +27,13 @@ public class Main extends Canvas implements Runnable {
     private Dimension d;
     private BufferedImage bf;
 
-    private final List<JsonObject> imgObject = new ArrayList<>(), drawObject = new ArrayList<>();
-    private final List<BufferedImage> videoFrames = new ArrayList<>();
+    private File outputPic, outputVid, map;
+    private FileWriter picWriter, vidWriter;
 
-    private boolean running = false, js = true;
+    private final List<JsonObject> drawObject = new ArrayList<>();
+    int f = 0;
+
+    private volatile boolean running = false, js = true, b = false, rendering = true;
 
     private static final float WIDTH = 640, HEIGHT = WIDTH / 12 * 9;
     private static float LWIDTH = 640, LHEIGHT = LWIDTH / 12 * 9;
@@ -82,6 +86,7 @@ public class Main extends Canvas implements Runnable {
     }
 
     private void tick() {
+        rendering = true;
         CWIDTH = (float) window.getWH().width;
         CHEIGHT = (float) window.getWH().height;
         if (LWIDTH != CWIDTH || LHEIGHT != CHEIGHT) {
@@ -89,7 +94,6 @@ public class Main extends Canvas implements Runnable {
         }
         LWIDTH = CWIDTH;
         LHEIGHT = CHEIGHT;
-        boolean b = false;
         try {
             URLConnection request = new URI("http://localhost:8111/map_info.json").toURL().openConnection();
             request.connect();
@@ -97,17 +101,16 @@ public class Main extends Canvas implements Runnable {
         } catch (Exception _) {}
         try {
             if (b) {
+                if (!(outputPic.exists())) outputPic.createNewFile();
+                if (!(outputVid.exists())) outputVid.createNewFile();
                 bf = Optional.ofNullable(ImageIO.read(new URI("http://localhost:8111/map.img?gen=-1").toURL())).orElse(ImageIO.read(Objects.requireNonNull(getClass().getResource("res/map.png"))));
+                if (!(map.exists())) {map.createNewFile();ImageIO.write(bf, "png", map);}
                 URLConnection request = new URI("http://localhost:8111/map_obj.json").toURL().openConnection();
                 request.connect();
-
                 JsonArray array = JsonParser.parseReader(new InputStreamReader((InputStream) request.getContent())).getAsJsonArray();
-                for (int i = 0; i < array.asList().size(); ) {
+                for (int i = 0; i < array.asList().size();) {
                     if (Objects.equals(array.get(i).getAsJsonObject().get("type").getAsString(), "ground_model") || Objects.equals(array.get(i).getAsJsonObject().get("type").getAsString(), "aircraft") || Objects.equals(array.get(i).getAsJsonObject().get("type").getAsString(), "bombing_point")) {
-                        if (!imgObject.contains(array.get(i).getAsJsonObject())) {
-                            imgObject.add(array.get(i).getAsJsonObject());
-                            drawObject.add(array.get(i).getAsJsonObject());
-                        }
+                        drawObject.add(array.get(i).getAsJsonObject());
                     }
                     i++;
                 }
@@ -164,22 +167,26 @@ public class Main extends Canvas implements Runnable {
 
         g.drawImage(bf, 0, 0,d.width, d.height, null);
 
-        BufferedImage image = new BufferedImage(256, 256, BufferedImage.TYPE_3BYTE_BGR);
+        StringBuilder yello = null;
 
-        Graphics2D ig2d = image.createGraphics();
+        if (b) yello = new StringBuilder("\t\"" + f + "\": [");
 
         for (int i = 0; i < drawObject.size();) {
             JsonObject object = drawObject.get(i).getAsJsonObject();
-            g2d.setColor(Color.decode(object.get("color").getAsString()));
-            ig2d.setColor(Color.decode(object.get("color").getAsString()));
-            Rectangle2D.Float rect = new Rectangle2D.Float(((float)d.width) * object.get("x").getAsFloat(), ((float)d.height) * object.get("y").getAsFloat(), hi * zoom, hi * zoom);
-            Rectangle2D.Float rect2 = new Rectangle2D.Float(1024 * object.get("x").getAsFloat(), 1024 * object.get("y").getAsFloat(), 1, 1);
+            WarThunderObject wto = new WarThunderObject(WarThunderObject.Type.fromString(object.get("type").getAsString()), object.get("color").getAsString(), object.get("blink").getAsInt(), WarThunderObject.Icon.fromString(object.get("icon").getAsString()), object.get("x").getAsFloat(), object.get("y").getAsFloat());
+            try {
+                if (f == 0) picWriter.append("\t\"").append(String.valueOf(wto)).append("\"\n");
+                else picWriter.append(",\t\"").append(String.valueOf(wto)).append("\"\n");
+            } catch (Exception e) {e.printStackTrace();}
+            g2d.setColor(wto.getColor());
+            Rectangle2D.Float rect = new Rectangle2D.Float(((float)d.width) * wto.getX(), ((float)d.height) * wto.getY(), hi * zoom, hi * zoom);
             g2d.fill(rect);
-            ig2d.fill(rect2);
+            if (i == 0 && b) yello.append("\n\t\t").append("\"").append(wto).append("\"");
+            else if (b) yello.append(",\n\t\t").append("\"").append(wto).append("\"");
             i++;
         }
 
-        if (!js && !(drawObject.isEmpty())) videoFrames.add(image);
+        if (b) {yello.append("\n\t],\n"); try {vidWriter.append(yello.toString());} catch (Exception e) {e.printStackTrace();} f++;}
 
         g.setColor(Color.BLUE);
         g.fillRect(170, 400, 300, 40);
@@ -190,6 +197,7 @@ public class Main extends Canvas implements Runnable {
         bs.show();
 
         drawObject.clear();
+        rendering = false;
     }
 
     @NotNull
@@ -233,6 +241,20 @@ public class Main extends Canvas implements Runnable {
 
         if (!(output.exists())) output.mkdir();
 
+        map = new File("output/map.png");
+
+        outputPic = new File("output/photoOutput.json");
+        outputVid = new File("output/videoOutput.json");
+
+        try {
+            picWriter = new FileWriter(outputPic);
+            picWriter.append("[\n");
+            vidWriter = new FileWriter(outputVid);
+            vidWriter.append("{\n");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         Mouse mouse = new Mouse(this);
         //this.addMouseWheelListener(new Mouse(this));
         this.addMouseListener(mouse);
@@ -244,15 +266,24 @@ public class Main extends Canvas implements Runnable {
     }
 
     public void genImage(boolean auto) {
+        while (rendering) {
+            Thread.onSpinWait();
+        }
+        System.out.println(LocalTime.now());
         BufferedImage image = new BufferedImage(1024, 1024, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
-        g2d.drawImage(bf, 0, 0,image.getWidth(), image.getHeight(), null);
+        try {g2d.drawImage(ImageIO.read(map), 0, 0,image.getWidth(), image.getHeight(), null);} catch (Exception e) {e.printStackTrace();}
 
-        for (int i = 0; i < imgObject.size();) {
-            JsonObject object = imgObject.get(i).getAsJsonObject();
-            g2d.setColor(Color.decode(object.get("color").getAsString()));
-            Rectangle2D.Float rect = new Rectangle2D.Float(1024 * object.get("x").getAsFloat(), 1024 * object.get("y").getAsFloat(), 4, 4);
+        JsonArray array = null;
+
+        try {picWriter.append("]");array = JsonParser.parseReader(new FileReader("output/wphotoOutput.json")).getAsJsonArray();} catch (Exception e) {e.printStackTrace();}
+
+        for (int i = 0; i < array.size();) {
+            System.out.println(((((float) i) / ((float) array.size()))*100) + "%");
+            WarThunderObject object = WarThunderObject.fromString(array.get(i).getAsString());
+            g2d.setColor(object.getColor());
+            Rectangle2D.Float rect = new Rectangle2D.Float(1024 * object.getX(), 1024 * object.getY(), 4, 4);
             g2d.fill(rect);
             i++;
         }
@@ -273,11 +304,14 @@ public class Main extends Canvas implements Runnable {
             e.printStackTrace();
         }
         if (auto) {
-            imgObject.clear();
+            //PrintWriter pw = new PrintWriter(picWriter, false);
+            //pw.flush();
+            //pw.close();
+            //try {picWriter.close();} catch (Exception e) {e.printStackTrace();}
         }
 
         try {
-            final Rational framerate = Rational.make(1, 5);
+            final Rational framerate = Rational.make(1, 50);
 
             final Muxer muxer = Muxer.make(name + ".mp4", null, null);
 
@@ -304,14 +338,19 @@ public class Main extends Canvas implements Runnable {
             picture.setTimeBase(framerate);
 
             final MediaPacket packet = MediaPacket.make();
-            for (int i = 0; i < videoFrames.size(); i++) {
-                System.out.println(i);
-                final BufferedImage frame = new BufferedImage(1024, 1024, BufferedImage.TYPE_3BYTE_BGR);
-                final Graphics gd = frame.getGraphics();
-                final BufferedImage back = bf;
-                final BufferedImage icons = videoFrames.get(i);
 
-                gd.drawImage(back, 0, 0, frame.getWidth(), frame.getHeight(), null);
+            JsonObject object = null;
+
+            try {vidWriter.append("}");object = JsonParser.parseReader(new FileReader("output/wvideoOutput.json")).getAsJsonObject();} catch (Exception e) {e.printStackTrace();}
+
+            for (int i = 0; i < object.size(); i++) {
+                System.out.println(((((float) i) / ((float) array.size()))*100) + "%");
+                final BufferedImage frame = new BufferedImage(1024, 1024, BufferedImage.TYPE_3BYTE_BGR);
+                final Graphics2D gd = (Graphics2D) frame.getGraphics().create();
+                final BufferedImage icons = new BufferedImage(1024, 1024, BufferedImage.TYPE_3BYTE_BGR);
+                makeFrame(object.get(i + "").getAsJsonArray(), icons);
+
+                gd.drawImage(ImageIO.read(map), 0, 0,image.getWidth(), image.getHeight(), null);
                 gd.drawImage(icons, 0, 0, frame.getWidth(), frame.getHeight(), null);
 
                 gd.dispose();
@@ -338,7 +377,27 @@ public class Main extends Canvas implements Runnable {
             e.printStackTrace();
         }
         if (auto) {
-            videoFrames.clear();
+            //PrintWriter pw2 = new PrintWriter(vidWriter, false);
+            //pw2.flush();
+            //pw2.close();
+            //try {vidWriter.close();} catch (Exception e) {e.printStackTrace();}
+            f = 0;
+            map.delete(); //needs to be fixed
         }
+        System.out.println("done!");
+        System.out.println(LocalTime.now());
+    }
+
+    public static void makeFrame(JsonArray array, BufferedImage image) {
+        Graphics g = image.getGraphics();
+        Graphics2D g2d = (Graphics2D) g.create();
+        for (int i = 0; i < array.size();) {
+            WarThunderObject object = WarThunderObject.fromString(array.get(i).getAsString());
+            g2d.setColor(object.getColor());
+            Rectangle2D.Float r2d = new Rectangle2D.Float(1024 * object.getX(), 1024 * object.getY(), 4, 4);
+            g2d.fill(r2d);
+            i++;
+        }
+
     }
 }
