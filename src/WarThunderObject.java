@@ -1,7 +1,6 @@
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
-import java.util.Arrays;
 
 public class WarThunderObject {
 

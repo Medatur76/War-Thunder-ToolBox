@@ -19,7 +19,7 @@ public class Mouse extends MouseAdapter implements MouseWheelListener {
         int y = e.getY();
 
         if (moveOver(x, y,(float) 170,(float) 400,(float) 300,(float) 40)) {
-            main.genImage(false);
+            (new Main.Build(false, main)).start();
         }
     }
 
