@@ -53,6 +53,14 @@ public class Main extends Canvas implements Runnable {
     private static float CWIDTH = 640, CHEIGHT = CWIDTH / 12 * 9;
     public int zoom = 1;
 
+    public static String helpText = "Options:\n\t-?, -Help: Brings up this help menu. The application will not run if you use this flag.\n\t-v, -Version: Outputs the version of this app that you have. The application will not run if you use this flag.\n\t-pf, -PhotoFormat [format]: Allows you to change the format of the photo output. Can be written as \"format\" or [\"format1\", \"format2\", ...]. Available formats include .\n\t-nv, -NoVideo: Allows you to remove videos form the output.\n\t-s, -Size [width/height]: Allows you to change the size of the outputted photo and videos files. The width and height will be the same.\n\t-f, -Framerate [frames per second]: Allows you to set the framerate of the outputted video. For reference, by default this application retrieves 5 frames per second. By setting a value more than 5 the video will be faster.";
+
+    private static String photoFormat = ".png";
+    public static String[] photoFormats = null;
+    private static boolean video = true, multiFormat = false;
+    private static int renderedSize = 1024;
+    private static int rfps = 5;
+
     public synchronized void start() {
         thread = new Thread(this);
         thread.start();
@@ -182,7 +190,7 @@ public class Main extends Canvas implements Runnable {
 
         StringBuilder yello = null;
 
-        if (b && !p) yello = new StringBuilder("\t\"" + f + "\": [");
+        if (b && !p && video) yello = new StringBuilder("\t\"" + f + "\": [");
 
         for (int i = 0; i < drawObject.size();) {
             JsonObject object = drawObject.get(i).getAsJsonObject();
@@ -199,7 +207,7 @@ public class Main extends Canvas implements Runnable {
             i++;
         }
 
-        if (b && !p) {yello.append("\n\t],\n"); try {vidWriter.append(yello.toString());} catch (Exception e) {e.printStackTrace();} f++;}
+        if (b && !p && video) {yello.append("\n\t],\n"); try {vidWriter.append(yello.toString());} catch (Exception e) {e.printStackTrace();} f++;}
 
         g.setColor(Color.BLUE);
         g.fillRect(170, 400, 300, 40);
@@ -257,13 +265,15 @@ public class Main extends Canvas implements Runnable {
         map = new File("output/map.png");
 
         outputPic = new File("output/photoOutput.json");
-        outputVid = new File("output/videoOutput.json");
+        if (video) outputVid = new File("output/videoOutput.json");
 
         try {
             picWriter = new FileWriter(outputPic);
             picWriter.append("[\n");
-            vidWriter = new FileWriter(outputVid);
-            vidWriter.append("{\n");
+            if (video) {
+                vidWriter = new FileWriter(outputVid);
+                vidWriter.append("{\n");
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -275,6 +285,57 @@ public class Main extends Canvas implements Runnable {
     }
 
     public static void main(String[] args) {
+        try {
+            if (args[0] == null) System.out.println("Just in case you didn't know:\n" + helpText);
+        } catch (ArrayIndexOutOfBoundsException _) {
+            System.out.println("Just in case you didn't know:\n" + helpText);
+        }
+        for (int i = 0; i < args.length;) {
+            if (args[i].equals("-?") || args[i].equals("-Help")) {
+                System.out.println(helpText);
+                return;
+            } else if (args[i].equals("-v") || args[i].equals("-Version")) {
+                JsonObject object = null;
+                try {
+                    object = JsonParser.parseReader(new FileReader("src/res/BuildData.json")).getAsJsonObject();
+                } catch (Exception e) {e.printStackTrace();}
+                System.out.println(object.get("Version").getAsString() + "-" + object.get("Type").getAsString());
+                return;
+            } else if (args[i].equals("-pf") || args[i].equals("-PhotoFormat")) {
+                String ucf = args[i+1];
+                if (ucf.startsWith("[")) {
+                    if (ucf.endsWith("]")) {
+                        ucf = ucf.replace("[", "").replace("]", "").replace("\"", "");
+                        photoFormats = ucf.split(", ");
+                        for (int w = 0; w < photoFormats.length;) {
+                            if (!(photoFormats[i].startsWith("."))) photoFormats[i] = "." + photoFormats[i];
+                        }
+                        multiFormat = true;
+                    }
+                    else {
+                        System.out.println("Invalid photo array. Must begin with [ and end with ]");
+                        return;
+                    }
+                } else if (ucf.endsWith("]")) {
+                    System.out.println("Invalid photo array. Must begin with [ and end with ]");
+                    return;
+                } else {
+                    photoFormat = ucf.replace("\"", "");
+                    if (!(photoFormat.startsWith("."))) photoFormat = "." + photoFormat;
+                }
+                i++;
+            } else if (args[i].equals("-nv") || args[i].equals("-NoVideo")) {
+                video = false;
+            } else if (args[i].equals("-s") || args[i].equals("-Size")) {
+                renderedSize = Integer.decode(args[i+1]);
+                i++;
+            } else if (args[i].equals("-f") || args[i].equals("-Framerate")) {
+                rfps = Integer.decode(args[i+1]);
+                if (rfps < 1) rfps = 1;
+                i++;
+            }
+            i++;
+        }
         new Main();
     }
 
@@ -284,7 +345,7 @@ public class Main extends Canvas implements Runnable {
         }
         p = true;
         System.out.println(LocalTime.now());
-        BufferedImage image = new BufferedImage(1024, 1024, BufferedImage.TYPE_INT_RGB);
+        BufferedImage image = new BufferedImage(renderedSize, renderedSize, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
 
         try {g2d.drawImage(ImageIO.read(map), 0, 0,image.getWidth(), image.getHeight(), null);} catch (Exception e) {e.printStackTrace();}
@@ -297,7 +358,7 @@ public class Main extends Canvas implements Runnable {
             System.out.println(((((float) i) / ((float) array.size()))*100) + "%");
             WarThunderObject object = WarThunderObject.fromString(array.get(i).getAsString());
             g2d.setColor(object.getColor());
-            Rectangle2D.Float rect = new Rectangle2D.Float(1024 * object.getX(), 1024 * object.getY(), 4, 4);
+            Rectangle2D.Float rect = new Rectangle2D.Float(image.getWidth() * object.getX(), image.getHeight() * object.getY(), 4, 4);
             g2d.fill(rect);
             i++;
         }
@@ -307,96 +368,110 @@ public class Main extends Canvas implements Runnable {
         String name = "output/" + LocalDateTime.now().toString().replace("T", "+").replace(":", "-");
 
         try {
-            // Save as PNG
-            File file = new File(name + ".png");
-            ImageIO.write(image, "png", file);
-
-            // Save as JPEG
-            file = new File(name + ".jpg");
-            ImageIO.write(image, "jpg", file);
+            if (!multiFormat) {
+                File file = new File(name + photoFormat);
+                ImageIO.write(image, photoFormat.replace(".", ""), file);
+            } else {
+                for (String format : photoFormats) {
+                    File f = new File(name + format);
+                    ImageIO.write(image, format.replace(".", ""), f);
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
         if (auto) {
-            //PrintWriter pw = new PrintWriter(picWriter, false);
-            //pw.flush();
-            //pw.close();
-            //try {picWriter.close();} catch (Exception e) {e.printStackTrace();}
+            PrintWriter pw = new PrintWriter(picWriter, false);
+            pw.flush();
+            pw.close();
+            try {picWriter.close();} catch (Exception e) {e.printStackTrace();}
         }
 
-        try {
-            final Rational framerate = Rational.make(1, 50);
+        if (video) {
+            try {
+                final Rational framerate = Rational.make(1, rfps);
 
-            final Muxer muxer = Muxer.make(name + ".mp4", null, null);
+                final Muxer muxer = Muxer.make(name + ".mp4", null, null);
 
-            final MuxerFormat format = muxer.getFormat();
-            final Codec codec = Codec.findEncodingCodec(format.getDefaultVideoCodecId());
+                final MuxerFormat format = muxer.getFormat();
+                final Codec codec = Codec.findEncodingCodec(format.getDefaultVideoCodecId());
 
-            Encoder encoder = Encoder.make(codec);
+                Encoder encoder = Encoder.make(codec);
 
-            encoder.setWidth(1024);
-            encoder.setHeight(1024);
+                encoder.setWidth(renderedSize);
+                encoder.setHeight(renderedSize);
 
-            final PixelFormat.Type pixelformat = PixelFormat.Type.PIX_FMT_YUV420P;
-            encoder.setPixelFormat(pixelformat);
-            encoder.setTimeBase(framerate);
+                final PixelFormat.Type pixelformat = PixelFormat.Type.PIX_FMT_YUV420P;
+                encoder.setPixelFormat(pixelformat);
+                encoder.setTimeBase(framerate);
 
-            if (format.getFlag(MuxerFormat.Flag.GLOBAL_HEADER)) encoder.setFlag(Encoder.Flag.FLAG_GLOBAL_HEADER, true);
+                if (format.getFlag(MuxerFormat.Flag.GLOBAL_HEADER))
+                    encoder.setFlag(Encoder.Flag.FLAG_GLOBAL_HEADER, true);
 
-            encoder.open(null, null);
-            muxer.addNewStream(encoder);
-            muxer.open(null, null);
+                encoder.open(null, null);
+                muxer.addNewStream(encoder);
+                muxer.open(null, null);
 
-            MediaPictureConverter converter = null;
-            final MediaPicture picture = MediaPicture.make(encoder.getWidth(), encoder.getHeight(), pixelformat);
-            picture.setTimeBase(framerate);
+                MediaPictureConverter converter = null;
+                final MediaPicture picture = MediaPicture.make(encoder.getWidth(), encoder.getHeight(), pixelformat);
+                picture.setTimeBase(framerate);
 
-            final MediaPacket packet = MediaPacket.make();
+                final MediaPacket packet = MediaPacket.make();
 
-            JsonObject object = null;
+                JsonObject object = null;
 
-            try {vidWriter.append("}");object = JsonParser.parseReader(new FileReader(outputVid)).getAsJsonObject();} catch (Exception e) {e.printStackTrace();}
+                try {
+                    vidWriter.append("}");
+                    object = JsonParser.parseReader(new FileReader(outputVid)).getAsJsonObject();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
 
-            for (int i = 0; i < object.size(); i++) {
-                System.out.println(((((float) i) / ((float) array.size()))*100) + "%");
-                final BufferedImage frame = new BufferedImage(1024, 1024, BufferedImage.TYPE_3BYTE_BGR);
-                final Graphics2D gd = (Graphics2D) frame.getGraphics().create();
+                for (int i = 0; i < object.size(); i++) {
+                    System.out.println(((((float) i) / ((float) array.size())) * 1000) + "%");
+                    final BufferedImage frame = new BufferedImage(encoder.getWidth(), encoder.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+                    final Graphics2D gd = (Graphics2D) frame.getGraphics().create();
 
-                gd.drawImage(ImageIO.read(map), 0, 0,image.getWidth(), image.getHeight(), null);
+                    gd.drawImage(ImageIO.read(map), 0, 0, image.getWidth(), image.getHeight(), null);
 
-                makeFrame(object.get(i + "").getAsJsonArray(), gd);
+                    makeFrame(object.get(i + "").getAsJsonArray(), gd);
 
-                gd.dispose();
+                    gd.dispose();
 
-                if (converter == null)
-                    converter = MediaPictureConverterFactory.createConverter(frame, picture);
-                converter.toPicture(picture, frame, i);
+                    if (converter == null)
+                        converter = MediaPictureConverterFactory.createConverter(frame, picture);
+                    converter.toPicture(picture, frame, i);
+
+                    do {
+                        encoder.encode(packet, picture);
+                        if (packet.isComplete())
+                            muxer.write(packet, false);
+                    } while (packet.isComplete());
+                }
 
                 do {
-                    encoder.encode(packet, picture);
+                    encoder.encode(packet, null);
                     if (packet.isComplete())
                         muxer.write(packet, false);
                 } while (packet.isComplete());
+
+                muxer.close();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-
-            do {
-                encoder.encode(packet, null);
-                if (packet.isComplete())
-                    muxer.write(packet, false);
-            } while (packet.isComplete());
-
-            muxer.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+            if (auto) {
+                PrintWriter pw2 = new PrintWriter(vidWriter, false);
+                pw2.flush();
+                pw2.close();
+                try {
+                    vidWriter.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                map.delete(); //needs to be fixed
+            }
         }
-        if (auto) {
-            //PrintWriter pw2 = new PrintWriter(vidWriter, false);
-            //pw2.flush();
-            //pw2.close();
-            //try {vidWriter.close();} catch (Exception e) {e.printStackTrace();}
-            f = 0;
-            map.delete(); //needs to be fixed
-        }
+        if (auto) f = 0;
         System.out.println("done!");
         System.out.println(LocalTime.now());
         p = false;
@@ -406,7 +481,7 @@ public class Main extends Canvas implements Runnable {
         for (int i = 0; i < array.size();) {
             WarThunderObject object = WarThunderObject.fromString(array.get(i).getAsString());
             g2d.setColor(object.getColor());
-            Rectangle2D.Float r2d = new Rectangle2D.Float(1024 * object.getX(), 1024 * object.getY(), 4, 4);
+            Rectangle2D.Float r2d = new Rectangle2D.Float(renderedSize * object.getX(), renderedSize * object.getY(), 4, 4);
             g2d.fill(r2d);
             i++;
         }
