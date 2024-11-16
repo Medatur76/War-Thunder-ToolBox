@@ -4,6 +4,10 @@
     <root id="archive" name="WarThunderToolBox.jar">
       <element id="module-output" name="WarThunderToolBox" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/jetbrains/annotations/24.0.0/annotations-24.0.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/humble-video-all-0.3.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/humble-video-noarch-0.3.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/slf4j-api-1.7.5.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/humble-video-arch-x86_64-w64-mingw32-0.3.0.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$PROJECT_DIR$/../libraries/jars/gson-2.11.0.jar" path-in-jar="/" />
     </root>
   </artifact>
